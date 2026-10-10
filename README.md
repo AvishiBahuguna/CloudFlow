@@ -1,307 +1,129 @@
 # CloudFlow
 
-CloudFlow is a planned multi-container, question-driven data analysis
-pipeline. A user supplies a dataset and a natural-language question, the
-system analyzes the data, returns an evidence-backed answer and
-generates a report describing the workflow, decisions, findings, and
-limitations.
+A multi-container, question-driven data analysis pipeline. Give it a dataset and a plain-English question; it analyzes the data, answers with evidence, and writes a report covering its workflow, decisions, findings, and limitations.
 
-> **Project status:** Early prototype / architecture and Data Prep
-> implementation in progress. The full four-stage pipeline is not yet
-> implemented.
+> **Status:** early prototype. Architecture is defined and the Data Prep profiler runs. The full four-stage pipeline is not implemented yet.
 
-## Goals
+## What it does
 
-Given an input such as:
+**Input:** `churn.csv` + *"Which factors are associated with churn, and can we predict who will leave?"*
 
--   **Dataset:** `churn.csv`
--   **Question:** "Which factors are associated with customer churn, and
-    can we predict which customers are likely to leave?"
+**Output:** an evidence-backed answer, a report, and the notebooks and artifacts behind it, so the analysis can be inspected and reproduced.
 
-CloudFlow should:
+Not every question goes through machine learning. A descriptive question may only need EDA or a verified calculation.
 
-1.  Inspect and prepare the dataset.
-2.  Perform exploratory data analysis (EDA) relevant to the question.
-3.  Engineer features and train/evaluate a model when modeling is
-    appropriate.
-4.  Validate the results, answer the question, and produce a report.
-5.  Preserve notebooks, results, and artifacts so the analysis can be
-    inspected and reproduced.
+## Architecture
 
-The pipeline should not force every question through machine learning. A
-descriptive question may only need a verified calculation or EDA.
-
-## Proposed architecture
-
-``` text
+```text
 User: dataset + question
           |
           v
-   Orchestrator / Planner
-   - creates a run ID
-   - plans relevant stages
-   - tracks state and errors
-   - passes artifact references
+ Orchestrator / Planner     (creates run ID, plans stages, tracks state)
           |
           v
-   1. Data Prep Agent
+ 1. Data Prep Agent         (profile, clean, flag target candidates)
           |
           v
-   2. EDA Agent
+ 2. EDA Agent               (question-relevant stats and charts)
           |
           v
-   3. Feature Engineering & ML Agent
+ 3. Feature Eng. & ML Agent (features, baseline, train/evaluate (if needed))
           |
           v
-   4. Evaluation & Report Agent
+ 4. Evaluation & Report     (verify claims, answer, write report)
           |
           v
-   Final answer + report + supporting artifacts
+ Answer + report + artifacts
 ```
 
-Each agent is planned as a separate Docker container exposing a small
-API (for example, with FastAPI). The orchestrator coordinates the
-services; it should not do the agents' analysis itself.
+Each agent is a separate Docker container with a small API (FastAPI). The orchestrator coordinates them and does no analysis itself. Agents pass data through a shared per-run workspace.
 
-### Agent responsibilities
+| Stage | Key outputs |
+|---|---|
+| Data Prep | cleaned dataset, data profile, cleaning summary, notebook |
+| EDA | findings JSON, charts, notebook |
+| Feature Eng. & ML | model, predictions, experiment results, notebook |
+| Evaluation & Report | final answer, report, evidence references |
 
-  -----------------------------------------------------------------------
-  Component               Responsibilities        Expected outputs
-  ----------------------- ----------------------- -----------------------
-  Orchestrator / Planner  Accept input, create a  Pipeline state and run
-                          run, choose required    summary
-                          stages, track status,   
-                          handle                  
-                          timeouts/retries,       
-                          validate agent          
-                          responses               
+## How agents work
 
-  1\. Data Prep           Profile columns, types, Cleaned dataset, data
-                          missing values,         profile, cleaning
-                          duplicates and invalid  summary, executed
-                          values; apply justified notebook
-                          cleaning; identify      
-                          possible target columns 
+Each analysis agent uses an LLM to plan analyses and write Python, runs that code in a Jupyter notebook, reads the real outputs, and iterates.
 
-  2\. EDA                 Run question-relevant   Findings JSON, charts,
-                          statistics and          executed notebook
-                          visualizations; record  
-                          observations and        
-                          caveats                 
-
-  3\. Feature Engineering Decide whether modeling Model artifact when
-  & ML                    is needed; engineer     applicable,
-                          features; establish a   predictions, experiment
-                          baseline; train and     results, executed
-                          compare suitable models notebook
-
-  4\. Evaluation & Report Verify claims against   Final answer, report,
-                          computed evidence;      evidence/claim
-                          assess evaluation       references
-                          quality; answer the     
-                          question; summarize     
-                          decisions and           
-                          limitations             
-  -----------------------------------------------------------------------
-
-The exact plan should depend on the question and dataset. The target
-column, transformations, and metrics must be validated rather than
-guessed silently.
-
-## Proposed end-to-end workflow
-
-1.  **Receive input:** Store the original dataset without modifying it,
-    record the question, and create a unique `run_id`.
-2.  **Plan:** Inspect available metadata and select the stages needed to
-    answer the question.
-3.  **Run Data Prep:** Profile and validate the data, make documented
-    cleaning decisions, execute the work, and save outputs.
-4.  **Run EDA:** Read the prepared dataset and question, execute
-    relevant analyses, and save findings and charts.
-5.  **Run Feature Engineering & ML when needed:** Use an appropriate
-    split and preprocessing pipeline, check for leakage, train a
-    baseline and evaluate on held-out data.
-6.  **Evaluate and answer:** Check that important numerical claims match
-    the artifacts. If evidence is insufficient, state the limitation
-    rather than inventing an answer.
-7.  **Write report:** Produce a human-readable report plus structured
-    machine-readable results.
-8.  **Return results:** Provide the answer, report location, and
-    links/paths to supporting artifacts.
-
-## LLM-generated code and notebooks
-
-The planned workflow is for each analysis agent to use an LLM to choose
-analyses and generate Python code, then execute that code in a Jupyter
-notebook.
-
-``` text
-Agent receives question + input artifact references
-                     |
-                     v
-              LLM plans analysis
-                     |
-                     v
-          Generate notebook code cells
-                     |
-                     v
-             Execute the notebook
-                     |
-                     v
-         Capture outputs, errors, metrics
-                     |
-                     v
-         LLM interprets actual results
-                     |
-                     v
-        Save notebook + structured artifacts
+```text
+plan -> write code -> execute notebook -> read results -> interpret -> save artifacts
 ```
 
-Recommended components:
+Three things are kept separate: **executed code** (the notebook), **computed evidence** (structured results and metrics), and **interpretation** (the LLM's explanation). Numerical claims in the final answer are checked against stored artifacts, and associations are never presented as causation.
 
--   **Notebook format:** Jupyter `.ipynb`
--   **Notebook execution:** `nbclient` and `nbformat`
--   **Data analysis:** Pandas, NumPy, SciPy
--   **Visualization:** Matplotlib and/or Seaborn
--   **Machine learning:** scikit-learn
--   **Agent APIs:** FastAPI
--   **Orchestration:** Python service (proposed)
--   **Initial artifact exchange:** Shared Docker volume
--   **Report:** Markdown first; PDF can be added later
+**Security:** LLM-generated code is arbitrary code. It must run in a restricted worker with no credentials, no Docker socket, no network, resource limits, and a read-only copy of the input. Containers help but are not a complete sandbox.
 
-A notebook is an execution record, not proof that its conclusions are
-correct. Numerical results should be stored in structured artifacts and
-checked before they appear in the final answer.
+## Setup
 
-### Execution security
+> Only the Data Prep profiler runs today. These steps prepare a dev environment and verify what exists.
 
-LLM-generated Python is arbitrary code. Do not execute it with
-unrestricted access to the host, credentials, Docker socket or network.
-Use a restricted execution worker with resource limits and only the
-files and permissions it needs. A Docker container provides isolation,
-but it is not automatically a complete security sandbox.
+**Prerequisites:** Python 3.10+, Git, Docker (optional for now), and a free API key from an OpenAI-compatible provider such as [Groq](https://console.groq.com) or [Google AI Studio](https://aistudio.google.com). No OpenAI account needed. On Windows, use **WSL2** and keep the repo inside the WSL filesystem (e.g. `~/CloudFlow`).
 
-## Artifact layout (proposed)
+## 1. Clone and create a virtual environment
 
-``` text
+```bash
+git clone https://github.com/ananyast81/CloudFlow.git && cd CloudFlow
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+```
+
+On Ubuntu you may need `sudo apt install python3-venv python3-pip` first. Check isolation with `which python` (should be inside `.venv/`) and `echo $PYTHONPATH` (should be empty).
+
+
+## 2. Install dependencies
+
+```bash
+pip install -r requirements.txt   # or: pip install pandas pydantic openai
+```
+
+## 3. Configure the LLM
+
+Create a `.env` in the repo root (gitignored, never commit it):
+
+```env
+# Groq
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_API_KEY=your_key
+LLM_MODEL=llama-3.3-70b-versatile
+
+# Gemini (alternative)
+# LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+# LLM_MODEL=gemini-2.5-flash
+```
+
+Model names change; if you get "model not found", check the provider's model list. Then load the file:
+
+```bash
+set -a && source .env && set +a
+```
+
+## 4. Add a dataset
+
+Save the Telco Customer Churn CSV as `data/churn.csv` (the `data/` folder is gitignored). Don't send real customer data through free-tier LLMs.
+
+## 5. Docker (in progress)
+
+Build from the **repo root** so `shared/` is included:
+
+```bash
+docker build -f agents/data-prep-agent/Dockerfile -t cloudflow-data-prep .
+```
+
+Create a `.dockerignore` in the repo root with:
+
+```text
+.venv/
+.git/
+data/
+out/
 workspace/
-└── <run_id>/
-    ├── input/
-    │   └── original_dataset.csv
-    └── artifacts/
-        ├── data-prep/
-        │   ├── cleaned_data.parquet
-        │   ├── data_profile.json
-        │   ├── cleaning_summary.json
-        │   └── data_prep.ipynb
-        ├── eda/
-        │   ├── findings.json
-        │   ├── eda.ipynb
-        │   └── charts/
-        ├── ml/
-        │   ├── experiment_results.json
-        │   ├── predictions.csv
-        │   ├── model.joblib
-        │   └── ml.ipynb
-        └── final/
-            ├── answer.json
-            ├── report.json
-            ├── report.md
-            └── report.pdf
+__pycache__/
+.env
 ```
 
-These are intended outputs, not all implemented yet. Only create model
-artifacts when modeling is appropriate. Keep the original dataset
-immutable and have each stage write to its own artifact directory.
-
-## Evidence-backed answers and reports
-
-Keep these separate:
-
-1.  **Executed code:** the notebook cells that actually ran.
-2.  **Computed evidence:** structured outputs, statistics, model
-    metrics, and chart files.
-3.  **Interpretation:** the LLM's explanation of what the results mean.
-
-The report should cover:
-
--   Executive summary and original question
--   Dataset overview and data quality
--   Cleaning decisions and their rationale
--   EDA methods, findings, and visualizations
--   Feature engineering and model choices, if applicable
--   Evaluation methodology and measured results
--   Final answer
--   Assumptions, limitations, and reproducibility details
-
-Important claims should reference their supporting result artifact.
-Observational associations should not be presented as causal
-conclusions.
-
-## Suggested project structure
-
-This is a target structure and may need to be aligned with the
-repository's current layout.
-
-``` text
-CloudFlow/
-├── docker-compose.yml
-├── .env
-├── orchestrator/
-│   ├── Dockerfile
-│   ├── main.py
-│   ├── pipeline.py
-│   ├── planner.py
-│   └── state_manager.py
-├── agents/
-│   ├── data-prep-agent/
-│   │   ├── Dockerfile
-│   │   ├── main.py
-│   │   ├── profiler.py
-│   │   ├── cleaner.py
-│   │   └── notebook_runner.py
-│   ├── eda-agent/
-│   ├── ml-agent/
-│   └── evaluation-agent/
-├── shared/
-│   ├── state.py
-│   ├── schemas.py
-│   └── artifact_utils.py
-└── workspace/
-```
-
-## Current status
-
-### Done / confirmed in the current development work
-
--   [x] Defined the intended four-stage pipeline and the orchestrator's
-    role.
-
--   [x] Started a Data Prep profiler in
-    `agents/data-prep-agent/profiler.py`.
-
--   [x] The profiler is intended to produce a `ColumnProfile` for each
-    DataFrame column, including its name, dtype, missing-value count,
-    unique-value count, and sample values.
-
--   [x] Run the profiler successfully end to end against
-    `data/churn.csv`.
-
-### In progress / not yet verified as complete
-
--   [ ] Define and validate shared request/response schemas for agents.
--   [ ] Implement the Data Prep API and actual cleaning/artifact
-    outputs.
--   [ ] Add controlled notebook generation and execution.
--   [ ] Implement EDA, Feature Engineering & ML, and Evaluation & Report
-    agents.
--   [ ] Implement the orchestrator's stage management, conditional
-    execution, and error handling.
--   [ ] Configure Docker Compose and shared per-run artifact storage.
--   [ ] Add evidence validation and final report generation.
--   [ ] Add restricted execution for LLM-generated code.
-
-**Status note:** The items above reflect what has been
-attempted in the current development context. They are not a claim that
-the code has been tested successfully or that the full pipeline is
-running.
+A `docker-compose.yml` for the full pipeline is planned.
