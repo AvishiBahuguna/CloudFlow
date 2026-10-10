@@ -12,7 +12,7 @@ A multi-container, question-driven data analysis pipeline. Give it a dataset and
 
 Not every question goes through machine learning. A descriptive question may only need EDA or a verified calculation.
 
-## Architecture
+## Workflow
 
 ```text
 User: dataset + question
@@ -57,7 +57,8 @@ Three things are kept separate: **executed code** (the notebook), **computed evi
 
 **Security:** LLM-generated code is arbitrary code. It must run in a restricted worker with no credentials, no Docker socket, no network, resource limits, and a read-only copy of the input. Containers help but are not a complete sandbox.
 
-## Setup
+
+# Setup
 
 > Only the Data Prep profiler runs today. These steps prepare a dev environment and verify what exists.
 
