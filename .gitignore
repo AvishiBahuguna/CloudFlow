@@ -4,5 +4,9 @@ __pycache__/
 venv/
 .venv/
 *.csv
+# For testing
 data
 workspace
+# Allow frontend mock data source files
+!frontend/src/data/
+!frontend/src/data/**
