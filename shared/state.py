@@ -3,7 +3,8 @@
 from pydantic import BaseModel
 from typing import Optional
 
-# For data prep agent
+
+# ---------- Data profiling ----------
 class ColumnProfile(BaseModel):
     name: str
     dtype: str
@@ -11,6 +12,15 @@ class ColumnProfile(BaseModel):
     n_unique: int
     sample_values: list[str]
 
+class DatasetProfiler(BaseModel):
+    rows: int
+    cols: int
+    duplicate_rows: int
+    duplicate_col_names: list[str]
+    column_profiles: list[ColumnProfile]
+
+
+# ---------- Data preparation ----------
 class DataPrepResult(BaseModel):
     rows_before: int
     rows_after: int
@@ -19,6 +29,8 @@ class DataPrepResult(BaseModel):
     cleaning_steps: list[str]
     cleaned_dataset_path: list[str]
 
+
+# ---------- Pipeline state ----------
 class PipelineState(BaseModel):
     run_id: int
     problem_stmt: str
