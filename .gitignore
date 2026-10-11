@@ -5,3 +5,6 @@ venv/
 .venv/
 *.csv
 data
+# Allow frontend mock data source files
+!frontend/src/data/
+!frontend/src/data/**
