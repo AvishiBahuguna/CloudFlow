@@ -107,7 +107,16 @@ set -a && source .env && set +a
 
 Save the Telco Customer Churn CSV as `data/churn.csv` (the `data/` folder is gitignored). Don't send real customer data through free-tier LLMs.
 
-## 5. Docker (in progress)
+## 5. Frontend
+To run the frontend:
+
+```bash
+cd ~/CloudFlow/frontend
+npm install
+npm run dev
+```
+
+## 6. Docker (in progress)
 
 Build from the **repo root** so `shared/` is included:
 
