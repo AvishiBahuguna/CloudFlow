@@ -31,7 +31,6 @@ The agent organizes its operations into four categories:
 | Category | Purpose |
 |---|---|
 | Inspection | Examine data quality without modifying the dataset. |
-| Identification | Suggest potential target and identifier columns. |
 | Transformation | Modify the dataset to address identified issues. |
 | Validation | Check the dataset's structure and data quality after preparation. |
 
