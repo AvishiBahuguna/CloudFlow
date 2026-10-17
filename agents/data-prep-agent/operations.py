@@ -362,17 +362,28 @@ def remove_duplicates(df: pd.DataFrame, params: dict[str, Any]) -> tuple[pd.Data
 """
 def convert_types(df: pd.DataFrame, params: dict[str, Any]) -> tuple[pd.DataFrame, dict[str, Any]]:
     conversions = params.get("conversions")
-    if not isinstance(conversions, dict) or not conversions:
-        raise ValueError("'conversions' must map column names to target types.")
+    if not isinstance(conversions, list) or not conversions:
+        raise ValueError("'conversions' must be a non-empty list of dictionaries.")
     
-    _validate_cols(df, list(conversions.keys()))
+    for conversion in conversions:
+        if not isinstance(conversion, dict):
+            raise ValueError("Each conversion must be a dictionary.")
+        
+        if "column" not in conversion or "type" not in conversion:
+            raise ValueError("Each conversion must contain 'column' and 'type'.")
+    
+    columns = [conversion["column"] for conversion in conversions]
+    _validate_cols(df, list(columns))
 
     result_df = df.copy()
     details = {}
 
     supported_types = {"numeric", "integer", "string", "datetime", "category"}
 
-    for col, target_type in conversions.items():
+    for conversion in conversions:
+        col = conversion["column"]
+        target_type = conversion["type"]
+        
         if target_type not in supported_types:
             raise ValueError(f"Unsupported target type '{target_type}' for '{col}'.")
         
@@ -381,7 +392,7 @@ def convert_types(df: pd.DataFrame, params: dict[str, Any]) -> tuple[pd.DataFram
         if target_type == "numeric":
             result_df[col] = pd.to_numeric(result_df[col], errors="raise")
 
-        elif target_type == "interger":
+        elif target_type == "integer":
             result_df[col] = pd.to_numeric(result_df[col], errors="raise")
             non_missing = result_df[col].dropna()
 
