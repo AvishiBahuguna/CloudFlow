@@ -7,6 +7,7 @@ import sys
 
 from pathlib import Path
 from typing import Any
+import textwrap
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -311,6 +312,9 @@ def generate_notebook_code(problem_statement: str, plan: DataPrepPlan, dataset_p
         
         if cell.operation != expected_operation:
             raise ValueError(f"Step {index} should implement '{expected_operation}', but the LLM generated '{cell.operation}'.")
+        
+        # Remove unnecessary indentation from the generated code.
+        cell.code = textwrap.dedent(cell.code).strip()
         
         if not cell.code.strip():
             raise ValueError(f"Generated code for step {index} is empty.")
