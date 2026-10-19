@@ -12,7 +12,7 @@ from shared.schemas import DataPrepPlan
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 
-# Configure the Groq API client.
+# Configure the LLM API client.
 api_key = os.getenv("LLM_API_KEY")
 base_url = os.getenv("LLM_BASE_URL")
 model = os.getenv("LLM_MODEL")
