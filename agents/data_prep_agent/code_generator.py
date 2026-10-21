@@ -93,6 +93,7 @@ FORBIDDEN_CALLS = {
     (This is a basic validation layer, NOT a security sandbox.)
 """
 def validate_generated_code(code: str) -> None:
+    code = textwrap.dedent(code).strip()
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:
@@ -319,6 +320,7 @@ def generate_notebook_code(problem_statement: str, plan: DataPrepPlan, dataset_p
         if not cell.code.strip():
             raise ValueError(f"Generated code for step {index} is empty.")
         
+        cell.code = textwrap.dedent(cell.code).strip()
         validate_generated_code(cell.code)
 
     return generated

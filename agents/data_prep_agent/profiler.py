@@ -11,7 +11,7 @@ def profile_df(df: pd.DataFrame) -> DatasetProfiler:
         profiles.append(ColumnProfile(
             name= str(col),
             dtype= str(df[col].dtype),
-            missing_count= int(df[col].isna().sum()),
+            missing_count = int((df[col].isna() | df[col].astype("string").str.strip().eq("").fillna(False)).sum()),
             n_unique= int(df[col].nunique()),
             sample_values= [str(v) for v in df[col].dropna().unique()[:5]],
         ))

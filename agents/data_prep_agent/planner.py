@@ -99,6 +99,30 @@ def create_data_prep_plan(problem_statement: str, dataset_profile: dict) -> Data
             "reasoning": "Explain the overall preparation strategy."
         }
 
+        For the convert_types operation, the "conversions" parameter
+        must be a list of dictionaries.
+
+        Each dictionary must contain:
+        - "column": the name of the column to convert
+        - "type": the target type
+
+        Supported target types are:
+        numeric, integer, string, datetime, category.
+
+        Example:
+        {
+            "conversions": [
+                {
+                    "column": "TotalCharges",
+                    "type": "numeric"
+                },
+                {
+                    "column": "SeniorCitizen",
+                    "type": "integer"
+                }
+            ]
+        }
+
         Requirements:
         - Every operation MUST contain operation, params and reason.
         - The top-level object MUST contain every field shown above.
@@ -201,21 +225,23 @@ def validate_plan(plan: DataPrepPlan, df: pd.DataFrame) -> None:
         param_columns = params.get("columns", [])
 
         if isinstance(param_columns, str):
-            param_columns = [columns]
+            param_columns = [param_columns]
 
         if not isinstance(param_columns, list):
             errors.append(f"Operation {idx + 1} ({operation_name}): 'columns' must be a list of column names.")
         else:
-            for col in columns:
+            for col in param_columns:
                 if col not in columns:
                     errors.append(f"Operation {idx + 1} ({operation_name}): Column '{col}' does not exist.")
 
         # Validate columns specified in conversion mappings
-        conversions = params.get("conversions", [])
+        if operation_name == "convert_types":
+            conversions = params.get("conversions")
 
-        if not isinstance(conversions, list):
-            errors.append(f"Operation {idx + 1} ({operation_name}): 'conversions' must be a dictionary.")
-        else:
+            if not isinstance(conversions, list) or not conversions:
+                errors.append(f"Operation {idx + 1} ({operation_name}): 'conversions' must be a non-empty list of dictionaries.")
+                continue
+
             for conv in conversions:
                 if not isinstance(conv, dict):
                     errors.append(f"Operation {idx + 1} ({operation_name}): Each conversion must be a dictionary.")

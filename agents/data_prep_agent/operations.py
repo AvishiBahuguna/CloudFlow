@@ -185,12 +185,36 @@ def _get_invalid_mask(series: pd.Series, rule: dict[str, Any]) -> pd.Series:
 """
 def inspect_missing(df: pd.DataFrame, params: dict[str, Any]) -> dict[str, Any]:
     cols = _require_cols(df, params)
-    result = {
-        col: {
-            "missing_count": int(df[col].isna().sum()),
-            "missing_percentage": round(float(df[col].isna().mean() * 100), 2),
-        } for col in cols
-    }
+    result = {}
+
+    for col in cols:
+        # Detect actual NaN/None values
+        missing_mask = df[col].isna()
+
+        # Also detect empty strings and whitespace-only strings
+        blank_mask = (
+            df[col]
+            .astype("string")
+            .str.strip()
+            .eq("")
+            .fillna(False)
+        )
+
+        # Combine both conditions
+        missing_mask = missing_mask | blank_mask
+
+        missing_count = int(missing_mask.sum())
+        missing_percentage = (
+            round(float(missing_count / len(df) * 100), 2)
+            if len(df) > 0
+            else 0.0
+        )
+
+        result[col] = {
+            "missing_count": missing_count,
+            "missing_percentage": missing_percentage,
+        }
+
     return {"missing_values": result}
 
 
