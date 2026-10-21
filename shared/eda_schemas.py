@@ -48,7 +48,101 @@ class PlotArtifact(BaseModel):
     path: str
     title: str
     description: str
+class DatasetOverview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
+    total_cells: NonNegativeInt
+    missing_cells: NonNegativeInt
+
+    missing_cell_percentage: FiniteFloat = Field(
+        ge=0,
+        le=100,
+    )
+
+    rows_with_missing: NonNegativeInt
+    complete_rows: NonNegativeInt
+
+    duplicate_rows: NonNegativeInt
+
+    duplicate_row_percentage: FiniteFloat = Field(
+        ge=0,
+        le=100,
+    )
+
+    empty_columns: list[str] = Field(
+        default_factory=list
+    )
+
+    constant_columns: list[str] = Field(
+        default_factory=list
+    )
+
+    unique_counts: dict[str, NonNegativeInt] = Field(
+        default_factory=dict
+    )
+
+    dtype_counts: dict[str, NonNegativeInt] = Field(
+        default_factory=dict
+    )
+
+ColumnRole = Literal[
+    "numeric",
+    "categorical",
+    "boolean",
+    "datetime",
+    "identifier",
+    "text",
+    "unknown",
+]
+
+
+class ColumnInterpretation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dtype: str
+    role: ColumnRole
+
+    source: Literal[
+        "inferred",
+        "override",
+    ] = "inferred"
+
+    non_missing_count: NonNegativeInt
+    unique_count: NonNegativeInt
+
+    reason: str
+
+    warnings: list[str] = Field(
+        default_factory=list
+    )
+
+class CSVReadLimits(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_bytes: int = Field(
+        default=20 * 1024 * 1024,
+        gt=0,
+        strict=True,
+    )
+
+    max_rows: int = Field(
+        default=100_000,
+        gt=0,
+        strict=True,
+    )
+
+    max_columns: int = Field(
+        default=150,
+        gt=0,
+        strict=True,
+    )
+
+    max_cells: int = Field(
+        default=5_000_000,
+        gt=0,
+        strict=True,
+    )
+    
 class EDAResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -74,3 +168,8 @@ class EDAResult(BaseModel):
         default_factory=dict
     )
     plots: list[PlotArtifact] = Field(default_factory=list)
+    dataset_overview: DatasetOverview | None = None
+    column_interpretations: dict[
+        str,
+        ColumnInterpretation,
+    ] = Field(default_factory=dict)

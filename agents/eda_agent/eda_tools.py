@@ -1,15 +1,23 @@
 from typing import BinaryIO
-
+from shared.eda_schemas import CSVReadLimits
 import numpy as np
 import pandas as pd
 
 from shared.eda_schemas import (
     CategoryFrequency,
     CategoricalSummary,
+    ColumnRole,
+    DatasetOverview,
     EDAResult,
     NumericSummary,
+    CSVReadLimits,
 )
-
+from agents.eda_agent.column_tools import (
+    interpret_columns,
+)
+from agents.eda_agent.csv_tools import (
+    load_csv_dataset,
+)
 def _finite_or_none(value) -> float | None:
     if pd.isna(value):
         return None
@@ -91,30 +99,130 @@ def summarize_categorical_column(
         other_count=non_missing_count - shown_count,
     )
 
-def summarize_dataset(df: pd.DataFrame) -> EDAResult:
+def summarize_dataset_overview(
+    df: pd.DataFrame,
+) -> DatasetOverview:
+    if df.empty:
+        raise ValueError(
+            "The dataset must contain at least "
+            "one row and one column."
+        )
+
+    missing_mask = df.isna()
+
+    total_cells = int(df.size)
+
+    missing_cells = int(
+        missing_mask.sum().sum()
+    )
+
+    rows_with_missing = int(
+        missing_mask.any(axis=1).sum()
+    )
+
+    duplicate_rows = int(
+        df.duplicated().sum()
+    )
+
+    unique_counts = {
+        column: int(count)
+        for column, count in (
+            df.nunique(dropna=True).items()
+        )
+    }
+
+    dtype_counts = {
+        dtype: int(count)
+        for dtype, count in (
+            df.dtypes
+            .astype(str)
+            .value_counts()
+            .items()
+        )
+    }
+
+    return DatasetOverview(
+        total_cells=total_cells,
+        missing_cells=missing_cells,
+        missing_cell_percentage=(
+            missing_cells / total_cells
+        ) * 100,
+        rows_with_missing=rows_with_missing,
+        complete_rows=(
+            len(df) - rows_with_missing
+        ),
+        duplicate_rows=duplicate_rows,
+        duplicate_row_percentage=(
+            duplicate_rows / len(df)
+        ) * 100,
+        empty_columns=[
+            column
+            for column, count in unique_counts.items()
+            if count == 0
+        ],
+        constant_columns=[
+            column
+            for column, count in unique_counts.items()
+            if count == 1
+        ],
+        unique_counts=unique_counts,
+        dtype_counts=dtype_counts,
+    )
+
+def summarize_dataset(df: pd.DataFrame,*,role_overrides: dict[str,ColumnRole,] | None = None,) -> EDAResult:
     if df.empty:
         raise ValueError(
             "The dataset must contain at least one row and one column."
         )
+    if not df.columns.is_unique:
+        raise ValueError(
+            "Dataset column names must be unique."
+        )
 
+    if any(
+        not isinstance(column, str)
+        or not column.strip()
+        for column in df.columns
+    ):
+        raise ValueError(
+            "Dataset column names must be "
+            "non-empty strings."
+        )
+    
     row_count, column_count = df.shape
 
-    numeric_columns = (
-        df.select_dtypes(
-            include=["number"],
-            exclude=["complex", "timedelta"],
-        )
-        .columns
-        .tolist()
+    column_interpretations = interpret_columns(
+        df,
+        role_overrides=role_overrides,
     )
 
-    categorical_columns = (
-        df.select_dtypes(
-            include=["object", "string", "category", "bool"]
+    numeric_columns = [
+        column
+        for column, info in (
+            column_interpretations.items()
         )
-        .columns
-        .tolist()
-    )
+        if info.role == "numeric"
+    ]
+
+    categorical_columns = [
+        column
+        for column, info in (
+            column_interpretations.items()
+        )
+        if info.role in {
+            "categorical",
+            "boolean",
+        }
+    ]
+
+    other_columns = [
+        column
+        for column in df.columns
+        if (
+            column not in numeric_columns
+            and column not in categorical_columns
+        )
+    ]
 
     other_columns = []
 
@@ -153,6 +261,7 @@ def summarize_dataset(df: pd.DataFrame) -> EDAResult:
         )
 
     return EDAResult(
+        dataset_overview=summarize_dataset_overview(df),
         row_count=row_count,
         column_count=column_count,
         numeric_columns=numeric_columns,
@@ -162,19 +271,27 @@ def summarize_dataset(df: pd.DataFrame) -> EDAResult:
         missing_percentages=missing_percentages,
         numeric_summaries=numeric_summaries,
         categorical_summaries=categorical_summaries,
+        column_interpretations=column_interpretations,
     )
 def summarize_csv(
     csv_file: BinaryIO,
     *,
-    encoding: str = "utf-8",
+    encoding: str = "utf-8-sig",
     sep: str = ",",
+    role_overrides: dict[
+        str,
+        ColumnRole,
+    ] | None = None,
+    csv_limits: CSVReadLimits | None = None,
 ) -> EDAResult:
-    csv_file.seek(0)
-
-    df = pd.read_csv(
+    df = load_csv_dataset(
         csv_file,
         encoding=encoding,
         sep=sep,
+        limits=csv_limits,
     )
 
-    return summarize_dataset(df)
+    return summarize_dataset(
+        df,
+        role_overrides=role_overrides,
+    )
