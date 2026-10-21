@@ -32,14 +32,3 @@ def save_profile(profile: DatasetProfiler, output_path: str)->None:
         json.dump(profile.model_dump(), file, indent=4)
 
     print(f"Profile saved to: {output}")
-
-
-
-if __name__ == "__main__":
-    dataset_path = Path("~/CloudFlow/data/churn.csv").expanduser()
-    output_path = "~/CloudFlow/workspace/inital_profile.json"
-
-    df = pd.read_csv(dataset_path)
-    profile = profile_df(df)
-    print(profile.model_dump_json(indent=4))
-    save_profile(profile, output_path)
