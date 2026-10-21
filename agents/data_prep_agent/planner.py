@@ -31,13 +31,7 @@ client = OpenAI(api_key=api_key, base_url=base_url)
 
 # Return the available operations and their descriptions.
 def get_operation_catalogue() -> dict:
-    import sys
-
-    agent_dir = str(PROJECT_ROOT / "agents" / "data-prep-agent")
-    if agent_dir not in sys.path:
-        sys.path.insert(0, agent_dir)
-
-    from operations import OPERATION_CATALOGUE
+    from agents.data_prep_agent.operations import OPERATION_CATALOGUE
     return OPERATION_CATALOGUE
 
 

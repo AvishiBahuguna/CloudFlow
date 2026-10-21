@@ -1,9 +1,7 @@
 # Translate validated plan to Python code
-
 import ast
 import json
 import os
-import sys
 
 from pathlib import Path
 from typing import Any
@@ -13,18 +11,13 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
+from agents.data_prep_agent.planner import get_operation_catalogue
+from shared.schemas import DataPrepPlan
+
 # CONFIGURATION
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-AGENT_DIR = Path(__file__).resolve().parent
 
 load_dotenv(PROJECT_ROOT / ".env")
-
-# Allow imports from agent directory
-if str(AGENT_DIR) not in sys.path:
-    sys.path.insert(0, str(AGENT_DIR))
-
-from planner import get_operation_catalogue
-from shared.schemas import DataPrepPlan
 
 
 # Configure the LLM API client.

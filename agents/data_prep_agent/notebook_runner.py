@@ -1,5 +1,4 @@
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -9,12 +8,9 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 from nbformat.v4 import new_code_cell, new_notebook
 
-from code_generator import GeneratedNotebookCode
+from agents.data_prep_agent.code_generator import GeneratedNotebookCode
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# Ensure project-root imports work.
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 # ============================================================
