@@ -163,6 +163,17 @@ def _get_invalid_mask(series: pd.Series, rule: dict[str, Any]) -> pd.Series:
     
     raise ValueError(f"Unsupported validation rule: {rule_type}")
 
+"""
+    Convert empty and whitespace-only strings into actual missing values.
+"""
+def normalize_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+    result_df = df.copy()
+    for col in result_df.columns:
+        if pd.api.types.is_object_dtype(result_df[col]) or pd.api.types.is_string_dtype(result_df[col]):
+            # Convert empty or whitespace-only strings to pd.NA.
+            result_df[col] = result_df[col].replace(r"^\s*$", pd.NA, regex=True)
+
+    return result_df
 
 # ============================================================
 # INSPECTION OPERATIONS
@@ -186,6 +197,7 @@ def _get_invalid_mask(series: pd.Series, rule: dict[str, Any]) -> pd.Series:
 def inspect_missing(df: pd.DataFrame, params: dict[str, Any]) -> dict[str, Any]:
     cols = _require_cols(df, params)
     result = {}
+    df = normalize_missing_values(df)
 
     for col in cols:
         # Detect actual NaN/None values
@@ -304,6 +316,7 @@ def handle_missing(df: pd.DataFrame, params: dict[str, Any]) -> tuple[pd.DataFra
     cols = _require_cols(df, params)
     strategy = params.get("strategy")
     valid_strategies = {"drop_rows", "mean", "median", "mode", "constant"}
+    df = normalize_missing_values(df)
 
     if strategy not in valid_strategies:
         raise ValueError(f"Unsupported missing-value strategy: {strategy}")

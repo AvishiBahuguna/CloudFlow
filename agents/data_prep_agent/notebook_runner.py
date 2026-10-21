@@ -36,6 +36,11 @@ def create_init_cell(input_path: str) -> str:
         input_path = Path({str(input_path)!r})
         df = pd.read_csv(input_path)
 
+        # Normalize empty and whitespace-only cells.
+        for col in df.columns:
+            if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
+                df[col] = df[col].replace(r"^\s*$", pd.NA, regex=True)
+
         # Store results from each planned operation.
         operation_results = {{}}
 
