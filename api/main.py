@@ -2,6 +2,8 @@ import json
 import re
 import shutil
 import uuid
+import os
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -12,9 +14,12 @@ import pandas as pd
 from fastapi import FastAPI, BackgroundTasks, HTTPException, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
+from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = PROJECT_ROOT / "workspace"
+# Load LLM configuration so it can be passed to the container.
+load_dotenv(PROJECT_ROOT / ".env")
 
 MAX_FILE_SIZE_MB = 10
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
@@ -70,35 +75,136 @@ def execute_run(run_id: str) -> None:
         
         run["status"] = "running"
         run["started_at"] = current_timestamp()
-        input_path = run["input_path"]
+        input_path = Path(run["input_path"]).resolve()
         objective = run["objective"]
 
+    try:
+        # Validate the input before starting Docker
+        if not input_path.is_file():
+            raise FileNotFoundError(f"Input dataset not found: {input_path}")
+        
+        # Ensure the uploaded dataset is inside the workspace
+        workspace_root = WORKSPACE_ROOT.resolve()
         try:
-            from agents.data_prep_agent.agent import run_data_prep
+            input_path.relative_to(workspace_root)
+        except ValueError:
+            raise ValueError("Input dataset must be inside the CloudFlow workspace.")
+        
+        # The agent's output directory is shared with the host
+        run_dir = workspace_root / run_id
+        status_path = run_dir / "container_status.json"
+        report_path = run_dir / "data-prep" / "preparation_report.json"
 
-            prepared_df, report = run_data_prep(
-            input_path=input_path,
-            problem_statement=objective,
-            run_id=run_id,
-            workspace_root=WORKSPACE_ROOT,
+        # Remove stale status from a previous attempt, if any.
+        status_path.unlink(missing_ok=True)
+
+        # Configure the Docker container.
+        container_name = f"cloudflow-data-prep-{run_id}"
+        docker_command = [
+            "docker",
+            "run",
+            "--rm",
+            "--name", container_name,
+
+            # Mount the host workspace into the container.
+            "--mount",
+            f"type=bind,source={workspace_root},target=/workspace",
+
+            # Pass the run configuration.
+            "-e", f"RUN_ID={run_id}",
+            "-e", f"OBJECTIVE={objective}",
+            "-e", f"INPUT_PATH=/workspace/{run_id}/input.csv",
+            "-e", "WORKSPACE_ROOT=/workspace",
+        ]
+
+        # Pass LLM configuration without baking secrets into the image.
+        for variable in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"):
+            value = os.environ.get(variable)
+            if value:
+                docker_command.extend(["-e", f"{variable}={value}"])
+
+        # Use the image built for the Data Prep Agent.
+        docker_command.append("cloudflow-data-prep:latest")
+
+        print(f"Starting Docker container for run: {run_id}")
+        # Run the container and wait for the pipeline to finish.
+        process = subprocess.run(
+            docker_command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        # Keep container logs available in the API server terminal.
+        if process.stdout:
+            print(f"[Data Prep Agent stdout]\n{process.stdout}")
+        if process.stderr:
+            print(f"[Data Prep Agent stderr]\n{process.stderr}")
+
+        # A non-zero exit code means the container failed.
+        if process.returncode != 0:
+            error_output = (process.stderr or process.stdout or "No error output.")
+            raise RuntimeError(
+                f"Data Prep container exited with code "
+                f"{process.returncode}: {error_output[-4000:]}"
             )
+        
+        # Read the status written by container_entrypoint.py.
+        if not status_path.is_file():
+            raise RuntimeError(f"Container finished without creating {status_path}")
 
-            report_json = json.loads(json.dumps(jsonable_encoder(report), default=str))
+        with status_path.open("r", encoding="utf-8") as file:
+            container_status = json.load(file)
 
-            result = {
-                "rows_after": int(prepared_df.shape[0]),
-                "columns_after": int(prepared_df.shape[1]),
-                "columns": [str(column) for column in prepared_df.columns],
-                "report": report_json,
-            }
+        if container_status.get("status") != "completed":
+            raise RuntimeError(
+                container_status.get(
+                    "error",
+                    "Data Prep container did not complete successfully."
+                )
+            )
+        
+        # Read the existing preparation report without modifying it.
+        if not report_path.is_file():
+            raise RuntimeError(f"Preparation report not found: {report_path}")
 
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            with RUNS_LOCK:
-                RUNS[run_id]["status"] = "failed"
-                RUNS[run_id]["completed_at"] = current_timestamp()
-                RUNS[run_id]["error"] = (f"{type(exc).__name__}: {exc}")
+        with report_path.open("r", encoding="utf-8") as file:
+            report = json.load(file)
+
+        # Preserve the result structure expected by the frontend.
+        result = {
+            "rows_after": int(
+                report.get(
+                    "rows_after",
+                    container_status["rows_after"],
+                )
+            ),
+            "columns_after": int(
+                report.get(
+                    "columns_after",
+                    container_status["columns_after"],
+                )
+            ),
+            "columns": report.get("column_names", []),
+            "report": report,
+        }
+
+        # Mark the run as completed.
+        with RUNS_LOCK:
+            RUNS[run_id]["status"] = "completed"
+            RUNS[run_id]["completed_at"] = current_timestamp()
+            RUNS[run_id]["result"] = result
+            RUNS[run_id]["error"] = None
+
+        print(f"Docker pipeline run completed: {run_id}")
+
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        with RUNS_LOCK:
+            RUNS[run_id]["status"] = "failed"
+            RUNS[run_id]["completed_at"] = current_timestamp()
+            RUNS[run_id]["error"] = (f"{type(exc).__name__}: {exc}")
 
 
 @app.get("/health")
