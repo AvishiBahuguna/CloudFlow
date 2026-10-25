@@ -7,18 +7,19 @@ from sklearn.pipeline import Pipeline
 from agents.modeling.registry import build_classification_candidates
 from shared.modeling import (
     CandidateCVResult,
+    ModelSelectionDecision,
     TrainingInput,
     TrainingSummary,
 )
 from shared.modeling_plan import ModelingPlan
 
 
-def train_classification(
+def validate_classification_inputs(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     training_input: TrainingInput,
     plan: ModelingPlan,
-) -> tuple[TrainingSummary, Pipeline]:
+) -> int:
     if training_input.task_type != "classification":
         raise ValueError(
             "This trainer currently supports classification only."
@@ -65,6 +66,16 @@ def train_classification(
             "for stratified cross-validation."
         )
 
+    return cv_folds
+
+
+def compare_classification_candidates(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    training_input: TrainingInput,
+    plan: ModelingPlan,
+    cv_folds: int,
+) -> tuple[list[CandidateCVResult], dict[str, Pipeline]]:
     cv = StratifiedKFold(
         n_splits=cv_folds,
         shuffle=True,
@@ -124,15 +135,98 @@ def train_classification(
             )
         )
 
-    # Temporary selection rule: highest mean score.
-    # Exact ties follow the order in the plan.
+    return candidate_results, candidates
+
+
+def select_classification_candidate(
+    candidate_results: list[CandidateCVResult],
+    plan: ModelingPlan,
+    metric: str = "f1_weighted",
+) -> ModelSelectionDecision:
+    if not candidate_results:
+        raise ValueError("Cannot select from empty candidate results.")
+
+    planned_ids = {c.candidate_id for c in plan.candidates}
+    result_ids = {r.candidate_id for r in candidate_results}
+
+    missing_from_plan = result_ids - planned_ids
+    if missing_from_plan:
+        raise ValueError(
+            f"Evaluated candidates {missing_from_plan} are not in the modeling plan."
+        )
+
+    # Selection rule: highest mean CV score.
+    # Ties preserve the candidate order in the modeling plan.
+    candidate_order = {c.candidate_id: i for i, c in enumerate(plan.candidates)}
+
     best_result = max(
         candidate_results,
-        key=lambda result: result.mean_score,
+        key=lambda r: (r.mean_score, -candidate_order.get(r.candidate_id, 0)),
     )
 
-    selected_pipeline = candidates[best_result.candidate_id]
+    reason = (
+        f"Selected candidate '{best_result.candidate_id}' ({best_result.model_name}) "
+        f"with the highest mean {metric} of {best_result.mean_score:.4f} "
+        f"(std: {best_result.std_score:.4f})."
+    )
+
+    return ModelSelectionDecision(
+        selected_candidate_id=best_result.candidate_id,
+        selected_model=best_result.model_name,
+        selection_rule="highest_mean_score",
+        selection_reason=reason,
+    )
+
+
+def fit_selected_pipeline(
+    candidates: dict[str, Pipeline],
+    selection: ModelSelectionDecision,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+) -> Pipeline:
+    if selection.selected_candidate_id not in candidates:
+        raise ValueError(
+            f"Selected candidate '{selection.selected_candidate_id}' was not found in available pipelines."
+        )
+
+    selected_pipeline = candidates[selection.selected_candidate_id]
     selected_pipeline.fit(X_train, y_train)
+    return selected_pipeline
+
+
+def train_classification(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    training_input: TrainingInput,
+    plan: ModelingPlan,
+) -> tuple[TrainingSummary, Pipeline]:
+    cv_folds = validate_classification_inputs(
+        X_train=X_train,
+        y_train=y_train,
+        training_input=training_input,
+        plan=plan,
+    )
+
+    candidate_results, candidates = compare_classification_candidates(
+        X_train=X_train,
+        y_train=y_train,
+        training_input=training_input,
+        plan=plan,
+        cv_folds=cv_folds,
+    )
+
+    selection = select_classification_candidate(
+        candidate_results=candidate_results,
+        plan=plan,
+        metric=training_input.primary_metric,
+    )
+
+    selected_pipeline = fit_selected_pipeline(
+        candidates=candidates,
+        selection=selection,
+        X_train=X_train,
+        y_train=y_train,
+    )
 
     summary = TrainingSummary(
         run_id=training_input.run_id,
@@ -140,8 +234,9 @@ def train_classification(
         training_rows=len(X_train),
         cv_folds=cv_folds,
         candidates=candidate_results,
-        selected_candidate_id=best_result.candidate_id,
-        selected_model=best_result.model_name,
+        selected_candidate_id=selection.selected_candidate_id,
+        selected_model=selection.selected_model,
+        selection_reason=selection.selection_reason,
     )
 
-    return summary, selected_pipeline
+    return summary, selected_pipeline

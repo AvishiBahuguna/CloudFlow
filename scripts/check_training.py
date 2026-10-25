@@ -2,11 +2,18 @@ import csv
 from pathlib import Path
 
 from agents.modeling.registry import build_classification_candidates
-from agents.modeling.trainer import train_classification
+from agents.modeling.trainer import (
+    compare_classification_candidates,
+    fit_selected_pipeline,
+    select_classification_candidate,
+    train_classification,
+    validate_classification_inputs,
+)
 from shared.dataset_split import split_dataset
 from shared.dataset_validation import load_dataset
-from shared.modeling import TrainingInput
+from shared.modeling import ModelSelectionDecision, TrainingInput
 from shared.modeling_plan import ModelingPlan
+
 
 
 def main():
@@ -60,11 +67,65 @@ def main():
                     f"parameter {name} was not applied correctly."
                 )
 
+        # Verify the decoupled stages independently.
+        cv_folds = validate_classification_inputs(
+            X_train=X_train,
+            y_train=y_train,
+            training_input=training_input,
+            plan=plan,
+        )
+        assert cv_folds >= 2, "Expected at least 2 CV folds."
+
+        cv_results, candidate_pipelines = compare_classification_candidates(
+            X_train=X_train,
+            y_train=y_train,
+            training_input=training_input,
+            plan=plan,
+            cv_folds=cv_folds,
+        )
+        assert len(cv_results) == len(plan.candidates), (
+            "Decoupled candidate comparison did not evaluate all candidates."
+        )
+
+        decision = select_classification_candidate(
+            candidate_results=cv_results,
+            plan=plan,
+            metric=training_input.primary_metric,
+        )
+        assert isinstance(decision, ModelSelectionDecision), (
+            "select_classification_candidate must return ModelSelectionDecision."
+        )
+        assert decision.selected_candidate_id in preview_candidates, (
+            "Selected candidate not found in candidate pool."
+        )
+        assert len(decision.selection_reason) > 0, (
+            "Selection decision must provide a non-empty reason."
+        )
+
+        standalone_fitted = fit_selected_pipeline(
+            candidates=candidate_pipelines,
+            selection=decision,
+            X_train=X_train,
+            y_train=y_train,
+        )
+        standalone_preds = standalone_fitted.predict(X_train.head(2))
+        assert len(standalone_preds) == 2, (
+            "Standalone fitted pipeline failed to predict sample rows."
+        )
+
+        # End-to-end trainer execution.
         summary, fitted_pipeline = train_classification(
             X_train,
             y_train,
             training_input,
             plan,
+        )
+
+        assert summary.selected_candidate_id == decision.selected_candidate_id, (
+            "Orchestrated training selected a different candidate than selection decision."
+        )
+        assert summary.selection_reason == decision.selection_reason, (
+            "Orchestrated training selection reason does not match decision."
         )
 
         expected_ids = {
@@ -95,7 +156,8 @@ def main():
     except (OSError, ValueError, TypeError, csv.Error) as error:
         raise SystemExit(f"Training failed: {error}")
 
-    print("Modeling plan execution and prediction checks passed.")
+    print("Decoupled modeling stages and end-to-end checks passed.")
+
 
     print("\nTraining summary:")
     print(summary.model_dump_json(indent=2))

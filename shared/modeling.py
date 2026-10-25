@@ -104,6 +104,19 @@ class CandidateCVResult(BaseModel):
     mean_fit_time_seconds: FiniteFloat = Field(ge=0)
 
 
+class ModelSelectionDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selected_candidate_id: str = Field(min_length=1)
+    selected_model: str = Field(min_length=1)
+    selection_rule: Literal[
+        "highest_mean_score",
+        "llm_recommendation",
+        "manual",
+    ] = "highest_mean_score"
+    selection_reason: str = Field(min_length=1)
+
+
 class TrainingSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -118,3 +131,7 @@ class TrainingSummary(BaseModel):
 
     selected_candidate_id: str = Field(min_length=1)
     selected_model: str = Field(min_length=1)
+    selection_reason: str = Field(
+        default="Selected candidate with highest mean cross-validation score.",
+        min_length=1,
+    )
