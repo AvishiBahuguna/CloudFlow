@@ -185,7 +185,7 @@ def create_data_prep_plan(problem_statement: str, dataset_profile: dict) -> Data
     Raises ValueError if the plan is invalid.
 """
 def validate_plan(plan: DataPrepPlan, df: pd.DataFrame) -> None:
-    from operations import OPERATION_CATALOGUE
+    from agents.data_prep_agent.operations import OPERATION_CATALOGUE
     errors = []
     columns = set(df.columns)
 
