@@ -10,3 +10,7 @@ workspace
 # Allow frontend mock data source files
 !frontend/src/data/
 !frontend/src/data/**
+
+# Generated artifacts
+artifacts/runs/
+*.joblib
