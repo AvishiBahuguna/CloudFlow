@@ -1,0 +1,7 @@
+OrderDate,Revenue,Region
+2026-01-05,100,North
+2026-01-20,200,South
+2026-03-03,300,North
+2026-03-04,,South
+2026-03-05,inf,North
+,900,South
