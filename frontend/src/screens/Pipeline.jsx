@@ -142,36 +142,82 @@ export default function Pipeline() {
         />
       </div>
       <div className="panel workflow-panel">
-        <div className="section-label">
-          <strong>One connected workflow</strong>
-          <span>
-            {run.status === "running" && (
-              <LoaderCircle size={13} className="spin" />
-            )}
-            {run.stage.replaceAll("_", " ")}
-          </span>
-        </div>
-        <Workflow
-          agents={run.agents}
-          selected={selected}
-          onSelect={setSelected}
-        />
-        <div className="agent-inspector">
-          <div>
-            <span className={`inspector-dot dot-${activeAgent.status}`} />
-            <strong>{selected.replaceAll("_", " ")}</strong>
-            <Status value={activeAgent.status} />
+        <div className="orbit-workspace">
+          <div className="orbit-canvas">
+            <div className="section-label">
+              <strong>Orchestrator Orbit</strong>
+              <span>
+                {run.status === "running" && (
+                  <LoaderCircle size={13} className="spin" />
+                )}
+                {run.stage.replaceAll("_", " ")}
+              </span>
+            </div>
+            <Workflow
+              agents={run.agents}
+              selected={selected}
+              onSelect={setSelected}
+            />
           </div>
-          <p>{activeAgent.summary}</p>
-          {activeAgent.decisions.length > 0 && (
-            <ul>
-              {activeAgent.decisions.map((text, i) => (
-                <li key={i}>{text}</li>
-              ))}
-            </ul>
-          )}
+          <aside className="agent-inspector">
+            <span className="step-label">
+              {selected === "human_review"
+                ? "HUMAN CHECKPOINT"
+                : "AGENT DOSSIER"}
+            </span>
+            <h2>
+              {selected === "human_review"
+                ? "Review inspector"
+                : "Stage inspector"}
+            </h2>
+            <div>
+              <span className={`inspector-dot dot-${activeAgent.status}`} />
+              <strong>{selected.replaceAll("_", " ")}</strong>
+              <Status value={activeAgent.status} />
+            </div>
+            <code className="stage-identifier">{selected}</code>
+            <p>
+              {activeAgent.summary ||
+                "No summary has been reported for this stage yet."}
+            </p>
+            {activeAgent.decisions.length > 0 && (
+              <ul>
+                {activeAgent.decisions.map((text, i) => (
+                  <li key={i}>{text}</li>
+                ))}
+              </ul>
+            )}
+          </aside>
         </div>
       </div>
+      <section className="panel event-panel">
+        <div className="panel-heading">
+          <h2>Live execution logs</h2>
+          <Terminal size={17} />
+        </div>
+        {!logData?.events?.length && (
+          <p className="help-text">
+            Waiting for execution events from the backend.
+          </p>
+        )}
+        <ol className="event-list">
+          {(logData?.events || []).map((event) => (
+            <li key={event.id}>
+              <i className={event.level === "error" ? "event-error" : ""} />
+              <div>
+                <time>
+                  {new Date(event.time).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </time>
+                <p>{event.message}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
       {run.status === "awaiting_approval" && (
         <ReviewPanel
           key={JSON.stringify(state.plan)}
@@ -288,31 +334,6 @@ export default function Pipeline() {
             )}
           </div>
           <aside>
-            <section className="panel event-panel">
-              <div className="panel-heading">
-                <h2>Activity</h2>
-                <Terminal size={17} />
-              </div>
-              <ol className="event-list">
-                {(logData?.events || []).map((event) => (
-                  <li key={event.id}>
-                    <i
-                      className={event.level === "error" ? "event-error" : ""}
-                    />
-                    <div>
-                      <time>
-                        {new Date(event.time).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
-                      </time>
-                      <p>{event.message}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </section>
             {state?.warnings?.length > 0 && (
               <section className="panel warnings-panel">
                 <h3>Keep in mind</h3>

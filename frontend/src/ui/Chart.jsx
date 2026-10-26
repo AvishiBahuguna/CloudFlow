@@ -24,9 +24,9 @@ export default function Chart({ runId, path }) {
           {
             ...figure.layout,
             autosize: true,
-            font: { family: "Inter, system-ui, sans-serif", color: "#526079" },
-            paper_bgcolor: "#fff",
-            plot_bgcolor: "#fff",
+            font: { family: "Inter, system-ui, sans-serif", color: "#b6c3d7" },
+            paper_bgcolor: "#111c2e",
+            plot_bgcolor: "#111c2e",
           },
           {
             responsive: true,

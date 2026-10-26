@@ -50,7 +50,7 @@ export default function ReviewPanel({ run, onDone }) {
           <ShieldCheck size={23} />
         </span>
         <div>
-          <p className="eyebrow">YOUR EXPERTISE MATTERS</p>
+          <p className="eyebrow">AWAITING HUMAN APPROVAL</p>
           <h2>A moment for your review</h2>
           <p>
             Your agents have prepared a plan. Check the decisions below before

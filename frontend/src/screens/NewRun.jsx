@@ -99,9 +99,9 @@ export default function NewRun() {
   return (
     <section>
       <PageHeader
-        eyebrow="A LITTLE DATA. A LOT OF POSSIBILITY."
+        eyebrow="MISSION CONTROL / NEW RUN"
         title="What will you discover?"
-        description="Bring your dataset and a question. Your agents will take it from there."
+        description="Connect a dataset. Define the objective. Put your agent team in motion."
       >
         <span className="subtle-badge">
           <Sparkles size={14} /> Your research, accelerated

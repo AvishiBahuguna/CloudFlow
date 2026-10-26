@@ -26,10 +26,10 @@ import Settings from "./screens/Settings";
 import "./studio.css";
 
 const links = [
-  ["/new-run", "New analysis", Plus],
+  ["/new-run", "New Run", Plus],
   ["/history", "Run history", History],
   ["/experiments", "Experiments", Layers3],
-  ["/settings", "Configuration", Settings2],
+  ["/settings", "Settings", Settings2],
 ];
 
 export default function Studio() {
@@ -54,7 +54,7 @@ export default function Studio() {
             <Boxes size={19} />
           </span>
           <div>
-            <strong>Data science studio</strong>
+            <strong>Mission control</strong>
             <small>Personal workspace</small>
           </div>
           <ChevronRight size={14} />
@@ -65,6 +65,7 @@ export default function Studio() {
             <NavLink
               key={path}
               to={path}
+              aria-label={label}
               className={({ isActive }) =>
                 isActive ? "nav-link active" : "nav-link"
               }
