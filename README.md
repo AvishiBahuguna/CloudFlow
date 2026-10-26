@@ -4,19 +4,52 @@ A five-agent data science workspace that turns a CSV and a natural-language pred
 
 **Implemented stack:** Python, LangGraph, FastAPI, Pandas, NumPy, scikit-learn, XGBoost, Matplotlib, Plotly, SHAP, MLflow, React, Vite and Docker. Gemini and Groq reasoning are supported through optional server-side configuration. Local planning runs without an API key.
 
-The two supplied ZIP archives contained the same 127 files. This project builds on the feature-modeling archive, retaining the original EDA and useful modeling utilities while completing the workflow. See [synopsis alignment](docs/SYNOPSIS_ALIGNMENT.md), [source inventory](docs/SOURCE_INVENTORY.md), [architecture](docs/ARCHITECTURE.md) and [verification](docs/VERIFICATION.md).
+## Features and workflow
+
+Upload and preview a CSV, define a prediction objective, review the proposed training plan, compare trained models, inspect diagnostics, make predictions, and download reports and artifacts. Run History preserves past analyses; Experiments shows candidate models and tracking details. The frontend uses actual backend state and results.
+
+### Five agents, six workflow stages
+
+| Order | Runtime stage | Responsibility |
+| --- | --- | --- |
+| 1 | `data_understanding` | Profile and clean the dataset |
+| 2 | `analysis_features` | Explore training data and propose features and a plan |
+| 3 | `human_review` | Human approval, supported plan edits, or rejection |
+| 4 | `modeling` | Train and compare candidate models |
+| 5 | `evaluation` | Evaluate the selected model and diagnose errors |
+| 6 | `reporting` | Explain findings and generate reports |
+
+**Human review is a checkpoint, not an autonomous agent.** The orchestrator coordinates five specialist agents and this review stage. Training waits for approval. Changing the target or problem type rebuilds the analysis and requests another review.
+
+The mission-control frontend redesign presents these stages around an Orchestrator Orbit, with a selected-stage dossier, execution logs, and dark navy/lime styling. That frontend change is separate from this README update: the layout available in a checkout depends on whether the frontend redesign has been incorporated. Six orbit nodes represent six stages, not six AI agents.
+
+See [synopsis alignment](docs/SYNOPSIS_ALIGNMENT.md), [architecture](docs/ARCHITECTURE.md), and [verification](docs/VERIFICATION.md) for implementation details.
+
+## Storage
+
+React/Vite communicates with FastAPI through `/api`; LangGraph coordinates execution and the background worker runs training and reporting.
+
+| Default location | Purpose |
+| --- | --- |
+| `workspace/runs.sqlite` | Run records and execution events |
+| `workspace/checkpoints.sqlite` | LangGraph workflow checkpoints and review pauses |
+| `workspace/mlflow.db` | Local MLflow experiment tracking |
+| `workspace/<run_id>/` | Datasets, fitted models, charts, reports, and reproducibility files |
+| `workspace/mlartifacts/` | Local MLflow artifacts |
+
+SQLite requires no separate database server. Preserve the workspace across restarts and deployments. `CLOUDFLOW_WORKSPACE` and `MLFLOW_TRACKING_URI` can override the defaults.
 
 ## Quick start on Windows
 
 Requirements: Python 3.11 and Node.js 22.12+ or 24+.
 
 ```powershell
-python -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 cd frontend
 npm ci
 cd ..
-Copy-Item .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 .\.venv\Scripts\python.exe -m scripts.dev
 ```
 
@@ -26,7 +59,30 @@ When dependencies are already installed, only the final command is needed. Do no
 
 `requirements.lock.txt` records the exact tested Windows/Python 3.11 packages. Use `pip install -r requirements.lock.txt` to recreate that environment; `requirements.txt` provides the cross-platform dependency ranges. Linux/macOS and Docker have not been runtime-tested on this Windows host.
 
-![New analysis interface](docs/screenshots/new-analysis.png)
+Screenshots in `docs/screenshots/` document an earlier frontend revision, rather than the mission-control redesign.
+
+### Start again after installation
+
+From the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.dev
+```
+
+Alternatively, use two PowerShell terminals starting at the repository root:
+
+```powershell
+# Terminal 1: backend and automatic worker
+.\.venv\Scripts\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+```powershell
+# Terminal 2: frontend
+cd frontend
+npm run dev
+```
+
+Choose the combined launcher or the separate terminals to avoid duplicate servers. Keep the terminals open and press Ctrl+C to stop. Confirm <http://localhost:8000/api/health> responds before uploading. If an upload returns 502, inspect both terminal outputs and check that the frontend proxy can reach the backend on port 8000.
 
 ## Quick start on Linux/macOS
 
@@ -173,14 +229,3 @@ npx playwright test
 ```
 
 Playwright is configured for installed Microsoft Edge. On Linux, install a Playwright-supported browser and adjust the configured channel. Tests use synthetic data and actually execute both classification and regression workflows; provider transport tests use mocks and do not require credentials. See [verification results](docs/VERIFICATION.md) for exactly what was run.
-
-## Boundaries and troubleshooting
-
-- **Training is waiting:** open the run and approve its plan. This pause is intentional.
-- **No worker:** check `/api/health`; start `python -m orchestrator.worker` if automatic workers are disabled. A stale execution lease marks an interrupted run failed; paused review checkpoints remain available.
-- **CSV rejected:** use UTF-8 CSV with unique nonempty headers and consistent row widths. Limits are 10 MB, 20,000 rows, 100 columns and 1,000,000 cells.
-- **Too few examples:** at least 12 usable distinct rows are needed. Classification also requires enough examples of every class for splitting and CV.
-- **Model warning:** open Activity and the report. Failed candidates, unavailable SHAP and MLflow failures are not silently presented as successful.
-- **Backend unreachable:** start FastAPI on port 8000, then Vite on 5173. The frontend environment file belongs at `frontend/.env`, not inside `src`.
-- **Slow run:** reduce dataset size, candidate models or retry rounds. Each execution segment is limited to 30 minutes.
-- **Scope:** tabular classification/regression with independent rows. The current split is not appropriate for time-dependent or grouped data without adaptation. This local single-user application has no authentication and should not be exposed publicly as-is.
