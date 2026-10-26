@@ -1,5 +1,4 @@
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -9,12 +8,9 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 from nbformat.v4 import new_code_cell, new_notebook
 
-from code_generator import GeneratedNotebookCode
+from agents.data_prep_agent.code_generator import GeneratedNotebookCode
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# Ensure project-root imports work.
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 # ============================================================
@@ -35,6 +31,11 @@ def create_init_cell(input_path: str) -> str:
         # Load the original dataset.
         input_path = Path({str(input_path)!r})
         df = pd.read_csv(input_path)
+
+        # Normalize empty and whitespace-only cells.
+        for col in df.columns:
+            if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
+                df[col] = df[col].replace(r"^\s*$", pd.NA, regex=True)
 
         # Store results from each planned operation.
         operation_results = {{}}

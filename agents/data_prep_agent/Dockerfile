@@ -1,8 +1,18 @@
 FROM python:3.10-slim
+
 WORKDIR /app
-COPY agents/data-prep-agent/requirements.txt .
-RUN pip install --no-cache-dir requirements.txt
-COPY shared/ ./shared/
-COPY agents/data-prep-agent ./agent/
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-CMD ["python", "agent/main.py"]
+
+COPY agents/data_prep_agent/requirements.txt ./requirements.txt
+
+RUN python -m pip install --no-cache-dir -r requirements.txt
+
+COPY agents/ ./agents/
+COPY shared/ ./shared/
+
+RUN mkdir -p /workspace
+
+CMD ["python", "-m", "agents.data_prep_agent.container_entrypoint"]

@@ -1,0 +1,22 @@
+# Secrets
+.env
+.env.*
+
+# Python environments and cache
+.venv/
+**/__pycache__/
+*.py[cod]
+
+# Git
+.git/
+
+# Datasets and generated outputs
+data/
+workspace/
+
+# Frontend dependencies
+frontend/node_modules/
+
+# Test and development files
+.pytest_cache/
+.mypy_cache/
