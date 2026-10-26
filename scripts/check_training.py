@@ -161,9 +161,10 @@ def main():
 
     print("\nTraining summary:")
     print(summary.model_dump_json(indent=2))
-
     print(f"\nReserved test rows: {len(X_test)}")
-    print("Final test evaluation is pending.")
+    print(
+        "Run 'python -m scripts.check_evaluation' to evaluate on reserved test rows."
+    )
 
 
 if __name__ == "__main__":
